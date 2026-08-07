@@ -27,9 +27,14 @@ RUN conda activate my &&\
     uv pip install torch==2.6.0 torchvision==0.21.0 xformers --index-url https://download.pytorch.org/whl/cu124
 
 COPY requirements.txt /tmp/requirements.txt
+# Do not install nvidia-modelopt[torch] here. It has a strong transitive torch
+# requirement and can silently replace the pinned torch/torchvision pair above,
+# causing torchvision ABI mismatches such as:
+#   RuntimeError: operator torchvision::nms does not exist
+# Install modelopt manually only if you need quantization tooling.
 RUN conda activate my &&\
     uv pip install -r /tmp/requirements.txt &&\
-    uv pip install onnxruntime-gpu onnx pycuda cuda-python tensorrt-cu12 tensorrt-lean-cu12 tensorrt-dispatch-cu12 nvidia-modelopt[torch] &&\
+    uv pip install onnxruntime-gpu onnx pycuda cuda-python tensorrt-cu12 tensorrt-lean-cu12 tensorrt-dispatch-cu12 &&\
     conda install -y -c anaconda h5py &&\
     conda install -y -c conda-forge libstdcxx-ng
 

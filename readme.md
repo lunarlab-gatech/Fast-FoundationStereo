@@ -46,6 +46,11 @@ git submodule update --init --recursive
 ```
 If you already cloned with `--recursive`, or the submodules move out of date later, re-run the same command to update them to the commit pinned by this repo.
 
+Then install the submodule package itself:
+```bash
+cd dependencies/robotdataprocess && pip install . && cd -
+```
+
 
 # Weights and Trade-off
 download from [here](https://drive.google.com/drive/folders/1HuTt7UIp7gQsMiDvJwVuWmKpvFzIIMap?usp=drive_link) and put under the folder `weights/` (e.g. `./weights/23-36-37`). Below table compares the differences among some representative models of varying sizes from our trained family. They are sorted from slowest to fastest, with accuracy descending, where runtime is profiled on GPU 3090, image size 640x480.
@@ -129,12 +134,17 @@ python scripts/make_single_onnx.py --model_dir weights/23-36-37/model_best_bp2_s
 
 Then convert to a single TRT engine:
 ```bash
-trtexec --onnx=output/fast_foundationstereo.onnx --saveEngine=output/fast_foundationstereo.engine --fp16
+trtexec --onnx=output/fast_foundationstereo.onnx --saveEngine=output/fast_foundationstereo.engine
 ```
 
 To run inference with the single ONNX or TRT engine:
 ```bash
 python scripts/run_demo_single_trt.py --model_dir output/ --left_file demo_data/left.png --right_file demo_data/right.png --intrinsic_file demo_data/K.txt --out_dir output_demo/ --get_pc 1 --remove_invisible 0 --denoise_cloud 1 --zfar 100
+```
+
+To run inference with the single ONNX or TRT engine on the AirMusuem dataset:
+```bash
+python scripts/run_demo_airmuseum_single_trt.py
 ```
 
 The script auto-detects `.engine` or `.onnx` files in `--model_dir`. To use a specific file, pass `--model_file` directly.
