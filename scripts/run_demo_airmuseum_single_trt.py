@@ -220,8 +220,9 @@ def find_model(model_dir: str) -> str:
 
 def load_airmuseum_stereo(dataset_path: str, robot_name: str):
     """Load and rectify a synced left/right image sequence for one AirMuseum robot."""
-    dataset_config_path = Path(dataset_path).parent
-    input_path = Path(dataset_path) / 'data' / robot_name
+    dataset_path = Path(dataset_path).expanduser()
+    dataset_config_path = dataset_path.parent
+    input_path = dataset_path / 'data' / robot_name
 
     left_cam_id = ROBOT_LEFT_CAM_MAP[robot_name]
     right_cam_id = 'cam101' if left_cam_id == 'cam100' else 'cam100'
@@ -254,21 +255,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Run Fast FoundationStereo with ONNX Runtime or TensorRT')
     parser.add_argument('--model_dir', type=str,
-                        default=f'{code_dir}/output_single_onnx',
+                        default=f'output_320x480',
                         help='Directory containing .onnx/.engine + config.yaml')
-    parser.add_argument('--model_file', type=str, default='',
-                        help='Explicit path to .onnx or .engine file (overrides auto-search)')
-    parser.add_argument('--dataset_path', type=str, required=True,
+    parser.add_argument('--model_file', type=str, default=None,
+                        help='Explicit path to .onnx or .engine file (overrides auto-search '
+                             'in --model_dir, which prefers .engine over .onnx)')
+    parser.add_argument('--dataset_path', type=str, default='~/data/AirMuseum_dataset/Scenario5',
                         help='e.g. ~/data/AirMuseum_dataset/Scenario5')
-    parser.add_argument('--robot_name', type=str, required=True,
+    parser.add_argument('--robot_name', type=str, default='robotC',
                         help='e.g. drone, robotA, robotB, robotC')
-    parser.add_argument('--out_dir', type=str,
-                        default=f'{code_dir}/../output_airmuseum')
+    parser.add_argument('--out_dir', type=str, default=None,
+                        help='Defaults to <dataset_path>/results/Fast-FoundationStereo')
     parser.add_argument('--remove_invisible', type=int, default=1)
     parser.add_argument('--denoise_cloud', type=int, default=1)
     parser.add_argument('--denoise_nb_points', type=int, default=30)
     parser.add_argument('--denoise_radius', type=float, default=0.03)
-    parser.add_argument('--get_pc', type=int, default=1,
+    parser.add_argument('--save_vis', type=int, default=0,
+                        help='Save disp_vis_*.png (left|right|colorized-disparity) per frame')
+    parser.add_argument('--get_pc', type=int, default=0,
                         help='Generate and save point cloud')
     parser.add_argument('--zfar', type=float, default=100,
                         help='Max depth (m) to include in point cloud')
@@ -279,6 +283,8 @@ if __name__ == '__main__':
     set_logging_format()
     set_seed(0)
     torch.autograd.set_grad_enabled(False)
+    if args.out_dir is None:
+        args.out_dir = Path(args.dataset_path).expanduser() / 'results' / 'Fast-FoundationStereo'
     out_dir = os.path.join(args.out_dir, args.robot_name)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -364,26 +370,30 @@ if __name__ == '__main__':
         # consistent.
         disp = disp.float().cpu().numpy().reshape(H, W).clip(0, None)
 
-        # ── Visualise disparity (non-blocking; updates live per frame) ──
+        # Visualise disparity (non-blocking; updates live per frame)
         vis = vis_disparity(disp, color_map=cv2.COLORMAP_TURBO)
         vis = np.concatenate([img0_ori, img1_ori, vis], axis=1)
-        imageio.imwrite(f'{out_dir}/disp_vis_{i:06d}.png', vis)
+        if args.save_vis:
+            imageio.imwrite(f'{out_dir}/disp_vis_{i:06d}.png', vis)
         s = 1280 / vis.shape[1]
         resized_vis = cv2.resize(vis, (int(vis.shape[1] * s), int(vis.shape[0] * s)))
         cv2.imshow('disp', resized_vis[:, :, ::-1])
         cv2.waitKey(1)
 
-        # ── Remove invisible pixels ──────────────────────────────────
+        # Remove invisible pixels
         if args.remove_invisible:
             _, xx = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
             invalid = (xx - disp) < 0
             disp[invalid] = np.inf
 
-        # ── Point cloud generation ────────────────────────────────────
-        if args.get_pc:
-            depth = K_scaled[0, 0] * baseline / disp
-            np.save(f'{out_dir}/depth_meter_{i:06d}.npy', depth)
+        # Depth (meters), saved every frame regardless of --get_pc 
+        depth = (K_scaled[0, 0] * baseline / disp).astype(np.float32)
+        depth_dir = os.path.join(out_dir, 'depth')
+        os.makedirs(depth_dir, exist_ok=True)
+        np.save(f'{depth_dir}/{left_data.timestamps[i]}.npy', depth)
 
+        # Point cloud generation
+        if args.get_pc:
             xyz_map = depth2xyzmap(depth, K_scaled)
             pcd = toOpen3dCloud(xyz_map.reshape(-1, 3), img0_ori.reshape(-1, 3))
             pts = np.asarray(pcd.points)
