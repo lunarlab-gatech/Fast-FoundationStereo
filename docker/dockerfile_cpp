@@ -4,7 +4,7 @@ ENV TZ=US/Pacific
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update --fix-missing && \
-    apt-get install -y apt-utils build-essential ca-certificates cmake curl ffmpeg git libturbojpeg-dev pkg-config wget libnvinfer10 libnvinfer-dev libnvinfer-plugin10 libnvinfer-plugin-dev libnvonnxparsers10 libnvonnxparsers-dev libnvinfer-dispatch10 libnvinfer-bin zstd libyaml-cpp-dev libopencv-dev libx11-xcb1 libxcb-xinerama0 libxcb-icccm4 libxcb-render-util0 libxcb-shape0 libxcb-keysyms1 libxcb-image0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-xkb1 libxcb-render0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-randr0 libxcb-xtest0 libsm6 libxext6 libxkbcommon0 && \
+    apt-get install -y apt-utils build-essential ca-certificates cmake curl ffmpeg git libturbojpeg-dev pkg-config sudo tmux wget libnvinfer10 libnvinfer-dev libnvinfer-plugin10 libnvinfer-plugin-dev libnvonnxparsers10 libnvonnxparsers-dev libnvinfer-dispatch10 libnvinfer-bin zstd libyaml-cpp-dev libopencv-dev libx11-xcb1 libxcb-xinerama0 libxcb-icccm4 libxcb-render-util0 libxcb-shape0 libxcb-keysyms1 libxcb-image0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-xkb1 libxcb-render0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-randr0 libxcb-xtest0 libsm6 libxext6 libxkbcommon0 && \
     rm -rf /var/lib/apt/lists/*
 
 SHELL ["/bin/bash", "--login", "-c"]
@@ -22,9 +22,7 @@ RUN cd / && wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-L
 ENV PATH=$PATH:/opt/conda/envs/my/bin
 ENV OPENCV_IO_ENABLE_OPENEXR=1
 
-RUN conda init bash &&\
-    echo "conda activate my" >> ~/.bashrc &&\
-    conda activate my &&\
+RUN conda activate my &&\
     pip install uv &&\
     uv pip install torch==2.9.1 torchvision==0.24.1 --index-url https://download.pytorch.org/whl/cu128
 
@@ -36,7 +34,7 @@ COPY requirements.txt /tmp/requirements.txt
 # Install modelopt manually only if you need quantization tooling.
 RUN conda activate my &&\
     uv pip install -r /tmp/requirements.txt &&\
-    uv pip install onnxruntime-gpu onnx onnxscript pycuda cuda-python tensorrt-cu12 tensorrt-lean-cu12 tensorrt-dispatch-cu12 && nvidia-modelopt[torch] &&\
+    uv pip install onnxruntime-gpu onnx onnxscript pycuda cuda-python tensorrt-cu12 tensorrt-lean-cu12 tensorrt-dispatch-cu12 &&\
     conda install -y -c anaconda h5py &&\
     conda install -y -c conda-forge libstdcxx-ng
 
@@ -45,4 +43,31 @@ RUN cd / && wget https://developer.download.nvidia.com/compute/tensorrt/10.11.0/
     echo 'alias trtexec="/usr/src/tensorrt/bin/trtexec"' >> ~/.bashrc &&\
     rm -f /nv-tensorrt-local-repo-ubuntu2204-10.11.0-cuda-12.9_1.0-1_amd64.deb
 
-SHELL ["/bin/bash", "-c", "source ~/.bashrc && conda activate my"]
+ENV SHELL=/bin/bash
+
+# Set default user arguments which should be overwritten by docker build
+ARG USERNAME=user
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+# Create a non-root user with matching UID/GID
+RUN groupadd --gid ${USER_GID} ${USERNAME} && \
+    useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
+    usermod -aG sudo ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+    groupadd --gid 110 render && \
+    usermod -aG render ${USERNAME}
+
+# Add a custom .bashrc with warm colors and fixed hostname
+RUN echo 'export PS1="\\[\\e[1;31m\\]\\u@fast_foundation_stereo_container\\[\\e[0m\\]:\\[\\e[1;33m\\]\\w\\[\\e[0m\\]\\$ "' > /home/${USERNAME}/.bashrc && \
+    chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.bashrc
+
+# Set default user & shell
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+SHELL ["/bin/bash", "-c"]
+RUN echo "export USER=${USERNAME}" >> ~/.bashrc && \
+    echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    echo "conda activate my" >> ~/.bashrc
+
+RUN echo "set -g mouse on" >> /home/${USERNAME}/.tmux.conf

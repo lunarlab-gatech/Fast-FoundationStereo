@@ -9,12 +9,12 @@ C++ runtime for Fast-FoundationStereo stereo depth inference on TensorRT.
 Environment setup:
 
 ```bash
-docker build --network host -t ffs -f docker/dockerfile_cpp .
-bash docker/run_container.sh
+bash docker/build_image.sh cpp
+bash docker/run_container.sh cpp
 ```
 
 
-`run_container.sh` mounts the parent of `docker/` (the repo root) into `/workspace`, so `cd /workspace/<repo-name>/cpp` lands you in this folder. Every `cd cpp`, `cpp/build/...`, `python3 scripts/...`, and `trtexec ...` example below assumes that working directory.
+`run_container.sh cpp` mounts the repo root into `/home/$(id -un)/Fast-FoundationStereo` and starts the container there. Every `cd cpp`, `cpp/build/...`, `python3 scripts/...`, and `trtexec ...` example below assumes that working directory. To reattach to this container later, use `./docker/enter_container.sh cpp`.
 
 ```text
 cpp/

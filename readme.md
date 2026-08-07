@@ -29,7 +29,7 @@ Stereo foundation models achieve strong zero-shot generalization but remain comp
 # Environment setup
 - Option 1: Docker
 ```bash
-docker build --network host -t ffs -f docker/dockerfile .
+bash docker/build_image.sh
 bash docker/run_container.sh
 ```
 
@@ -39,6 +39,12 @@ conda create -n ffs python=3.12 && conda activate ffs
 pip install torch==2.6.0 torchvision==0.21.0 xformers --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
+
+This repo uses git submodules (e.g. `dependencies/robotdataprocess`, used by `scripts/run_demo_airmuseum_single_trt.py`). After cloning, fetch them with:
+```bash
+git submodule update --init --recursive
+```
+If you already cloned with `--recursive`, or the submodules move out of date later, re-run the same command to update them to the commit pinned by this repo.
 
 
 # Weights and Trade-off
